@@ -67,7 +67,8 @@ class Tools(BaseModel, ABC):
             print(f"[debug:chatgpt:tools] calling {function_name} with {kwargs=}")
         callable_function = getattr(self, function_name)
         try:
-            return str(callable_function(**kwargs))
+            # replace square brackets with parentheses
+            return str(callable_function(**kwargs)).replace("[", "(").replace("]", ")")
         except Exception as e:
             # print traceback
             traceback.print_exc()

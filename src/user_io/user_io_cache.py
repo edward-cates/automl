@@ -21,6 +21,7 @@ class UserIoCache(Tools):
     test_dataloader: DataLoader | None = None
 
     models: dict[str, torch.nn.Module] = dict()
+    optimizer: torch.optim.Optimizer | None = None
 
     @property
     def describe_state_descriptor(self) -> ToolDescriptor:
@@ -38,7 +39,7 @@ class UserIoCache(Tools):
             "test_dataset": len(self.test_dataset) if self.test_dataset else "not set",
             "train_dataloader": f"batch_size={self.train_dataloader.batch_size}" if self.train_dataloader else "not set",
             "test_dataloader": f"batch_size={self.test_dataloader.batch_size}" if self.test_dataloader else "not set",
-            "models": self.models.keys(),
+            "models": [f"{key} ({type(model).__name__})" for key, model in self.models.items()],
         }
 
     @property
@@ -88,7 +89,6 @@ class UserIoCache(Tools):
                 ),
             ],
         )
-
     def load_model(self, model_name: str) -> str:
         """
         Load a model from the cache and add it to the current models.
@@ -167,8 +167,8 @@ class UserIoCache(Tools):
             return "No dataset is currently selected. Please choose a dataset first."
 
         dataset_length = len(self.dataset)
-        
-        if 0 < train_samples_or_frac < 1:
+
+        if 0 < train_samples_or_frac <= 1:
             train_samples = int(train_samples_or_frac * dataset_length)
         else:
             train_samples = int(train_samples_or_frac)
@@ -222,9 +222,52 @@ class UserIoCache(Tools):
         )
 
         set_type = "training" if is_train else "test"
-        self.dataloader = dataloader
-        
+
+        if is_train:
+            self.train_dataloader = dataloader
+        else:
+            self.test_dataloader = dataloader
+
         return f"Created DataLoader for the {set_type} set with batch size {batch_size} and shuffle={shuffle}."
+
+    @property
+    def create_optimizer_descriptor(self) -> ToolDescriptor:
+        return ToolDescriptor(
+            name="create_optimizer",
+            description="Create an optimizer for all loaded models.",
+            arguments=[
+                ToolArgument(
+                    name="learning_rate",
+                    description="The learning rate for the optimizer.",
+                    type="number",
+                ),
+                ToolArgument(
+                    name="weight_decay",
+                    description="The weight decay (L2 penalty) for the optimizer.",
+                    type="number",
+                ),
+            ],
+        )
+    def create_optimizer(self, learning_rate: float, weight_decay: float) -> str:
+        """
+        Create an optimizer for all loaded models.
+        """
+        if not self.models:
+            return "No models are loaded. Please load at least one model first."
+
+        # Collect parameters from all loaded models
+
+        # Create the optimizer
+        self.optimizer = torch.optim.AdamW(
+            [
+                {"params": model.parameters()}
+                for model in self.models.values()
+            ]
+            lr=learning_rate,
+            weight_decay=weight_decay,
+        )
+
+        return f"Created optimizer with learning rate {learning_rate} and weight decay {weight_decay} for {len(self.models)} model(s)."
 
     @property
     def tool_descriptors(self) -> list[ToolDescriptor]:

@@ -33,5 +33,5 @@ class ModelFinder:
         module = importlib.import_module(f"cache.models.{name}.__init__")
         class_name = module.__all__[0]
         model_class = getattr(module, class_name)
-        print(f"[debug:model_finder.py] loaded model: {model_class}")
+        print(f"[debug:model_finder.py] instantiating model: {model_class}")
         return model_class()
