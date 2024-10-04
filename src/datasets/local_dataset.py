@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 
+import torch
+
 class LocalDataset(ABC):
     """
     Dataset base class.
@@ -21,6 +23,10 @@ class LocalDataset(ABC):
 
     def __len__(self) -> int:
         return len(self.file_manifest)
+    
+    @abstractmethod
+    def __getitem__(self, index: int) -> torch.Tensor:
+        pass
 
     def split(
             self,
@@ -36,11 +42,12 @@ class LocalDataset(ABC):
 
     def _split_by_file_name(self, train_samples: int) -> tuple["LocalDataset", "LocalDataset"]:
         file_names_sorted = sorted(self.file_manifest, key=lambda x: x.name)
-        train_set = LocalDataset(
+        cls = type(self)
+        train_set = cls(
             path=self.path,
             file_manifest=file_names_sorted[:train_samples],
         )
-        test_set = LocalDataset(
+        test_set = cls(
             path=self.path,
             file_manifest=file_names_sorted[train_samples:],
         )

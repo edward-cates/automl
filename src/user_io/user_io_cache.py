@@ -20,12 +20,12 @@ class UserIoCache(Tools):
             name="describe_state",
             description="Describe the current state of the cache.",
         )
-    def describe_state(self) -> dict[str, str]:
+    def describe_state(self) -> dict:
         """
         Return a dictionary describing which properties are set.
         """
         return {
-            "dataset": self.dataset.name if self.dataset else "not set",
+            "dataset": f"{self.dataset.name} [{type(self.dataset).__name__}({len(self.dataset)})]" if self.dataset else "not set",
             "train_dataset": len(self.train_dataset) if self.train_dataset else "not set",
             "test_dataset": len(self.test_dataset) if self.test_dataset else "not set",
         }
