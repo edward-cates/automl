@@ -43,6 +43,9 @@ class UserIoCache(Tools, ABC):
             "train_dataloader": f"batch_size={self.train_dataloader.batch_size}" if self.train_dataloader else "not set",
             "test_dataloader": f"batch_size={self.test_dataloader.batch_size}" if self.test_dataloader else "not set",
             "models": [f"{key} ({type(model).__name__})" for key, model in self.models.items()],
+            "optimizer": "ready" if self.optimizer else "not set",
+            "train_losses": self.train_losses,
+            "test_losses": self.test_losses,
         }
 
     @property
@@ -176,7 +179,7 @@ class UserIoCache(Tools, ABC):
         else:
             train_samples = int(train_samples_or_frac)
 
-        if train_samples <= 0 or train_samples >= dataset_length:
+        if train_samples <= 0 or train_samples > dataset_length:
             return f"Invalid number of samples. Please provide a value between 1 and {dataset_length - 1}."
 
         self.train_dataset, self.test_dataset = self.dataset.split(
@@ -265,7 +268,7 @@ class UserIoCache(Tools, ABC):
             [
                 {"params": model.parameters()}
                 for model in self.models.values()
-            ]
+            ],
             lr=learning_rate,
             weight_decay=weight_decay,
         )

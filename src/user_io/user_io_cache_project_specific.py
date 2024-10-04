@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from tqdm.auto import tqdm
 
 from src.user_io.user_io_cache import UserIoCache
@@ -20,8 +21,15 @@ class UserIoCacheProjectSpecific(UserIoCache):
     def diffuser(self) -> torch.nn.Module:
         return self.models["tiny_diffuser"]
 
-    def run_train_loop(self) -> str:
-        for model in self.models:
+    @property
+    def run_train_epoch_descriptor(self) -> ToolDescriptor:
+        return ToolDescriptor(
+            name="run_train_epoch",
+            description="Run a training epoch.",
+        )
+
+    def run_train_epoch(self) -> str:
+        for model in self.models.values():
             model.train()
 
         total_losses = []
@@ -38,10 +46,12 @@ class UserIoCacheProjectSpecific(UserIoCache):
 
             total_loss.backward()
             # clip gradients.
-            for model in self.models:
+            for model in self.models.values():
                 torch.nn.utils.clip_grad_norm_(model.parameters(), self.gradient_clip)
             self.optimizer.step()
             self.optimizer.zero_grad()
+
+        self.train_losses = np.array(total_losses).mean()
 
         return f"Training complete. Total loss: {total_losses[-1]}, Image loss: {image_losses[-1]}, Noise loss: {noise_losses[-1]}"
 
