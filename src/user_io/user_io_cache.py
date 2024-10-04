@@ -1,7 +1,11 @@
 from pathlib import Path
 
+import torch
+from torch.utils.data import DataLoader
+
 from src.datasets.local_dataset import LocalDataset
 from src.datasets.dataset_finder import DatasetFinder
+from src.models.model_finder import ModelFinder
 from src.llm.chatgpt import Tools, ToolDescriptor, ToolArgument
 
 class UserIoCache(Tools):
@@ -12,7 +16,11 @@ class UserIoCache(Tools):
     dataset: LocalDataset | None = None
     train_dataset: LocalDataset | None = None
     test_dataset: LocalDataset | None = None
-    holdout_dataset: LocalDataset | None = None
+
+    train_dataloader: DataLoader | None = None
+    test_dataloader: DataLoader | None = None
+
+    models: dict[str, torch.nn.Module] = dict()
 
     @property
     def describe_state_descriptor(self) -> ToolDescriptor:
@@ -25,9 +33,12 @@ class UserIoCache(Tools):
         Return a dictionary describing which properties are set.
         """
         return {
-            "dataset": f"{self.dataset.name} [{type(self.dataset).__name__}({len(self.dataset)})]" if self.dataset else "not set",
+            "dataset": f"{self.dataset.name} ({type(self.dataset).__name__}, len={len(self.dataset)})" if self.dataset else "not set",
             "train_dataset": len(self.train_dataset) if self.train_dataset else "not set",
             "test_dataset": len(self.test_dataset) if self.test_dataset else "not set",
+            "train_dataloader": f"batch_size={self.train_dataloader.batch_size}" if self.train_dataloader else "not set",
+            "test_dataloader": f"batch_size={self.test_dataloader.batch_size}" if self.test_dataloader else "not set",
+            "models": self.models.keys(),
         }
 
     @property
@@ -46,6 +57,46 @@ class UserIoCache(Tools):
             return "No datasets found in the cache."
         dataset_list = "\n".join([str(dataset) for dataset in datasets])
         return f"Available datasets:\n{dataset_list}"
+
+    @property
+    def list_models_descriptor(self) -> ToolDescriptor:
+        return ToolDescriptor(
+            name="list_models",
+            description="List all available models in the cache.",
+        )
+
+    def list_models(self) -> str:
+        """
+        List all models found in the cache.
+        """
+        models = ModelFinder.list_models()
+        if not models:
+            return "No models found in the cache."
+        model_list = "\n".join([str(model) for model in models])
+        return f"Available models:\n{model_list}"
+
+    @property
+    def load_model_descriptor(self) -> ToolDescriptor:
+        return ToolDescriptor(
+            name="load_model",
+            description="Load a model from the cache and add it to the current models.",
+            arguments=[
+                ToolArgument(
+                    name="model_name",
+                    description="The name of the model to load",
+                    type="string",
+                ),
+            ],
+        )
+
+    def load_model(self, model_name: str) -> str:
+        """
+        Load a model from the cache and add it to the current models.
+        """
+        model = ModelFinder.load_model(model_name)
+        self.models[model_name] = model
+        return f"Model '{model_name}' has been loaded and added to the current models." + \
+            f"\nNew state: {self.describe_state()}"
 
     @property
     def create_new_dataset_descriptor(self) -> ToolDescriptor:
@@ -94,14 +145,6 @@ class UserIoCache(Tools):
         self.dataset = DatasetFinder.load_dataset(dataset_name)
         return f"Dataset '{dataset_name}' has been selected." + \
             f"\nNew state: {self.describe_state()}"
-
-    @property
-    def tool_descriptors(self) -> list[ToolDescriptor]:
-        return [
-            self.describe_state_descriptor,
-            self.list_datasets_descriptor,
-            self.choose_dataset_descriptor,
-        ]
     
     @property
     def split_dataset_descriptor(self) -> ToolDescriptor:
@@ -139,13 +182,55 @@ class UserIoCache(Tools):
         return f"Dataset split into train ({train_samples} samples) and test ({dataset_length - train_samples} samples) sets."
 
     @property
+    def create_dataloader_descriptor(self) -> ToolDescriptor:
+        return ToolDescriptor(
+            name="create_dataloader",
+            description="Create a DataLoader for the train or test dataset.",
+            arguments=[
+                ToolArgument(
+                    name="is_train",
+                    description="Whether to create a DataLoader for the training set (True) or test set (False).",
+                    type="boolean",
+                ),
+                ToolArgument(
+                    name="batch_size",
+                    description="The batch size for the DataLoader.",
+                    type="integer",
+                ),
+                ToolArgument(
+                    name="shuffle",
+                    description="Whether to shuffle the data in the DataLoader.",
+                    type="boolean",
+                ),
+            ],
+        )
+    def create_dataloader(self, is_train: bool, batch_size: int, shuffle: bool) -> str:
+        """
+        Create a DataLoader for the train or test dataset.
+        """
+        if is_train and self.train_dataset is None:
+            return "No training dataset is available. Please split the dataset first."
+        elif not is_train and self.test_dataset is None:
+            return "No test dataset is available. Please split the dataset first."
+
+        dataset = self.train_dataset if is_train else self.test_dataset
+
+        dataloader = DataLoader(
+            dataset,
+            batch_size=batch_size,
+            shuffle=shuffle
+        )
+
+        set_type = "training" if is_train else "test"
+        self.dataloader = dataloader
+        
+        return f"Created DataLoader for the {set_type} set with batch size {batch_size} and shuffle={shuffle}."
+
+    @property
     def tool_descriptors(self) -> list[ToolDescriptor]:
         return [
-            self.create_new_dataset_descriptor,
-            self.describe_state_descriptor,
-            self.list_datasets_descriptor,
-            self.choose_dataset_descriptor,
-            self.split_dataset_descriptor,
+            getattr(self, attr) for attr in dir(self)
+            if attr.endswith("_descriptor")
         ]
 
 

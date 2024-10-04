@@ -12,7 +12,7 @@ class DatasetFinder:
     Find and list datasets in the cache.
     Create new ones by transformerming files/folders.
     """
-    cache_dir: Path = Path("cache")
+    cache_dir: Path = Path("cache/datasets")
 
     def __init__(self):
         pass
@@ -64,7 +64,7 @@ class DatasetFinder:
 
         local_path = DatasetFinder.cache_dir / name
         assert not local_path.exists(), "Dataset already exists."
-        local_path.mkdir(exist_ok=False, parents=False)
+        local_path.mkdir(exist_ok=False, parents=True)
 
         # just make a symlink
         (local_path / "data").symlink_to(path, target_is_directory=True)

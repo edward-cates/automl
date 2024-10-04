@@ -10,10 +10,11 @@ class VideoDataset(LocalDataset):
     def __init__(
             self,
             path: Path,
+            file_manifest: list[Path] | None = None,
             img_size: int = 128, # assume square video for now.
             labels: list[str] | None = None, # assumed to be none for now - starting with an unsupervised task.
     ):
-        super().__init__(path)
+        super().__init__(path, file_manifest)
         self.img_size = img_size
         self.labels = labels
 
