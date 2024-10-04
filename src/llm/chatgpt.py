@@ -1,7 +1,37 @@
-import os
 
-from openai import OpenAI
+import os
+from abc import ABC, abstractmethod
+
 from pydantic import BaseModel
+from openai import OpenAI
+
+class Prompt(BaseModel):
+    messages: list[dict[str, str]] = []
+
+    @classmethod
+    def from_str(cls, content: str):
+        assert isinstance(content, str), f"Invalid content: {content=}, must be a string"
+        return cls(messages=[{"role": "user", "content": content}])
+
+    def add(self, role: str, content: str):
+        assert isinstance(role, str), f"Invalid role: {role=}, must be a string"
+        assert isinstance(content, str), f"Invalid content: {content=}, must be a string"
+        valid_roles = {'system', 'assistant', 'user', 'function', 'tool'}
+        assert role in valid_roles, f"Invalid role: {role=}, must be in {valid_roles=}"
+        self.messages.append({"role": role, "content": content})
+
+
+class Tools(BaseModel, ABC):
+    @property
+    @abstractmethod
+    def descriptors(self) -> list[dict]:
+        pass
+
+    def call(self, function_name: str, kwargs: dict):
+        print(f"[debug:chatgpt] calling {function_name} with {kwargs=}")
+        callable_function = getattr(self, function_name)
+        return callable_function(**kwargs)
+
 
 class ChatGPT:
     """
@@ -9,7 +39,7 @@ class ChatGPT:
     """
     def __init__(self, model_name: str = 'gpt-4o-mini'):
         """
-        `gpt-3.5-turbo` doesn't support structured output, which will throw an error
+        fyi:`gpt-3.5-turbo` doesn't support structured output, which will throw an error
             with this code.
         """
         api_key = os.getenv("OPENAI_API_KEY")
@@ -17,36 +47,43 @@ class ChatGPT:
         self.client = OpenAI(api_key=api_key)
         self.model_name = model_name
 
-    class Prompt(BaseModel):
-        messages: list[dict[str, str]] = []
-
-        @classmethod
-        def from_str(cls, content: str):
-            assert isinstance(content, str), f"Invalid content: {content=}, must be a string"
-            return cls(messages=[{"role": "user", "content": content}])
-
-        def add(self, role: str, content: str):
-            assert isinstance(role, str), f"Invalid role: {role=}, must be a string"
-            assert isinstance(content, str), f"Invalid content: {content=}, must be a string"
-            valid_roles = {'system', 'assistant', 'user', 'function', 'tool'}
-            assert role in valid_roles, f"Invalid role: {role=}, must be in {valid_roles=}"
-            self.messages.append({"role": role, "content": content})
-
     def ask(
             self,
-            prompt: Prompt | str,
+            prompt: Prompt, # Will modify in place.
             response_format: type[BaseModel],
+            tools: Tools | None = None,
+            depth: int = 0,
     ) -> BaseModel:
-        if isinstance(prompt, str):
-            prompt = self.Prompt.from_str(content=prompt)
+        assert depth < 10, "Depth limit reached"
         response = self.client.beta.chat.completions.parse(
             model=self.model_name,
             messages=prompt.messages,
             response_format=response_format,
+            tools=tools.descriptors if tools else None,
+            tool_choice="auto" if tools else None,
             temperature=0.0,
         )
-        # Print the AI's response
-        return response.choices[0].message.parsed
+        message = response.choices[0].message
+        prompt.messages.append(message)
+        if not message.tool_calls:
+            return message.parsed
+        for tool_call in message.tool_calls:
+            prompt.messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "function_name": tool_call.function.name,
+                "content": tools.call(
+                    function_name=tool_call.function.name,
+                    kwargs=tool_call.function.parsed_arguments,
+                ),
+            })
+        return self.ask(
+            prompt=prompt,
+            response_format=response_format,
+            tools=tools,
+            depth=depth+1,
+        )
+
 
 if __name__ == "__main__":
     # load dotenv
@@ -54,10 +91,44 @@ if __name__ == "__main__":
     load_dotenv()
     assert os.getenv("OPENAI_API_KEY") is not None, "OPENAI_API_KEY is not set"
     chat = ChatGPT()
-    prompt = "say hello world"
-    class Response(BaseModel):
-        say_hi: str
-    response = chat.ask(prompt, response_format=Response)
+
+    class MyTools(Tools):
+        @property
+        def descriptors(self) -> list[dict]:
+            return [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "say_hi",
+                        "description": "Say hi to the name that's given",
+                        "strict": True,
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "name": {
+                                    "type": "string",
+                                    "description": "Make up a random name",
+                                },
+                            },
+                            "required": ["name"],
+                            "additionalProperties": False,
+                        },
+                    },
+                }
+            ]
+
+        def say_hi(self, name: str):
+            return f"Hi, {name}!"
+
+    class MyResponse(BaseModel):
+        welcome_message: str
+
+    response = chat.ask(
+        Prompt.from_str("Say hi once and quit."),
+        response_format=MyResponse,
+        tools=MyTools(),
+    )
+
     print(response)
 
 
