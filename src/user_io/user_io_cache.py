@@ -1,3 +1,4 @@
+from pathlib import Path
 
 from src.datasets.local_dataset import LocalDataset
 from src.datasets.dataset_finder import DatasetFinder
@@ -24,9 +25,9 @@ class UserIoCache(Tools):
         Return a dictionary describing which properties are set.
         """
         return {
-            "dataset": self.dataset.name,
-            "train_dataset": len(self.train_dataset),
-            "test_dataset": len(self.test_dataset),
+            "dataset": self.dataset.name if self.dataset else "not set",
+            "train_dataset": len(self.train_dataset) if self.train_dataset else "not set",
+            "test_dataset": len(self.test_dataset) if self.test_dataset else "not set",
         }
 
     @property
@@ -45,6 +46,33 @@ class UserIoCache(Tools):
             return "No datasets found in the cache."
         dataset_list = "\n".join([str(dataset) for dataset in datasets])
         return f"Available datasets:\n{dataset_list}"
+
+    @property
+    def create_new_dataset_descriptor(self) -> ToolDescriptor:
+        return ToolDescriptor(
+            name="create_new_dataset",
+            description="Create a new dataset from a local path and add it to the cache.",
+            arguments=[
+                ToolArgument(
+                    name="name",
+                    description="The name for the new dataset",
+                    type="string",
+                ),
+                ToolArgument(
+                    name="path",
+                    description="The local path to the existing data directory. It should contain files of the same type.",
+                    type="string",
+                ),
+            ],
+        )
+    def create_new_dataset(self, name: str, path: str) -> str:
+        """
+        Create a new dataset from a local path and add it to the cache.
+        """
+        new_dataset = DatasetFinder.create_new_dataset(name=name, path=Path(path))
+        self.dataset = new_dataset
+        return f"New dataset '{name}' has been created and set as the current dataset." + \
+            f"\nNew state: {self.describe_state()}"
 
     @property
     def choose_dataset_descriptor(self) -> ToolDescriptor:
@@ -113,6 +141,7 @@ class UserIoCache(Tools):
     @property
     def tool_descriptors(self) -> list[ToolDescriptor]:
         return [
+            self.create_new_dataset_descriptor,
             self.describe_state_descriptor,
             self.list_datasets_descriptor,
             self.choose_dataset_descriptor,

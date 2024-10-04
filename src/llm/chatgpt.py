@@ -1,5 +1,6 @@
 
 import os
+import traceback
 from abc import ABC, abstractmethod
 
 from pydantic import BaseModel
@@ -68,6 +69,9 @@ class Tools(BaseModel, ABC):
         try:
             return str(callable_function(**kwargs))
         except Exception as e:
+            # print traceback
+            traceback.print_exc()
+            # print(f"[debug:chatgpt:tools] error: {e}")
             return str(e)
 
 

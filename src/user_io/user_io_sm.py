@@ -19,6 +19,7 @@ class UserIoSm:
 Tool descriptors:
 {self.user_cache.tool_descriptors}
 """)
+        gpt_prompt.add("system", "If you need input from the user to complete a task, ask for the needed information.")
         gpt_prompt.add("system", "Keep asking the user what they want to do until they say they want to stop/quit/exit/etc.")
         user_prompt: UserPrompt = self.llm.ask(
             prompt=gpt_prompt,

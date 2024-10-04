@@ -58,6 +58,10 @@ class DatasetFinder:
         """
         Create a new dataset.
         """
+        assert path.exists(), f"Path does not exist: {path}"
+        assert path.is_dir(), f"Path is not a directory: {path}"
+        assert " " not in name, "Dataset name cannot contain spaces."
+
         local_path = DatasetFinder.cache_dir / name
         assert not local_path.exists(), "Dataset already exists."
         local_path.mkdir(exist_ok=False, parents=False)
