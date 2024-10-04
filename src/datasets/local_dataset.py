@@ -24,8 +24,8 @@ class LocalDataset(ABC):
 
     def split(
             self,
-            how: str,
             train_samples: int,
+            how: str = "file_name",
             holdout_set: bool = False, # For now, not implemented.
     ) -> tuple["LocalDataset", "LocalDataset"]:
         if how == "file_name":

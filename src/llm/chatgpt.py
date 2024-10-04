@@ -65,7 +65,10 @@ class Tools(BaseModel, ABC):
         if debug:
             print(f"[debug:chatgpt:tools] calling {function_name} with {kwargs=}")
         callable_function = getattr(self, function_name)
-        return str(callable_function(**kwargs))
+        try:
+            return str(callable_function(**kwargs))
+        except Exception as e:
+            return str(e)
 
 
 class ChatGPT:
@@ -95,22 +98,28 @@ class ChatGPT:
             print(f"[debug:chatgpt ({depth=})] asking:")
             for message in prompt.messages:
                 print(f"  - {message=}")
-        if tools is None:
-            response = self.client.beta.chat.completions.parse(
-                model=self.model_name,
-                messages=prompt.messages,
-                response_format=response_format,
-                temperature=0.0,
-            )
-        else:
-            response = self.client.beta.chat.completions.parse(
-                model=self.model_name,
-                messages=prompt.messages,
-                response_format=response_format,
-                tools=tools.render_tool_descriptors() if tools else None,
-                tool_choice="auto" if tools else None,
-                temperature=0.0,
-            )
+        try:
+            if tools is None:
+                response = self.client.beta.chat.completions.parse(
+                    model=self.model_name,
+                    messages=prompt.messages,
+                    response_format=response_format,
+                    temperature=0.0,
+                )
+            else:
+                response = self.client.beta.chat.completions.parse(
+                    model=self.model_name,
+                    messages=prompt.messages,
+                    response_format=response_format,
+                    tools=tools.render_tool_descriptors() if tools else None,
+                    tool_choice="auto" if tools else None,
+                    temperature=0.0,
+                )
+        except Exception as e:
+            print("HERE ARE THE MESSAGES THAT LED TO THE ERROR:")
+            for message in prompt.messages:
+                print(f"  - {message=}")
+            raise e
         message = response.choices[0].message
         if debug:
             print(f"[debug:chatgpt ({depth=})] response: {message=}")
@@ -120,8 +129,9 @@ class ChatGPT:
                 "content": message.content,
             })
             return message.parsed
+        # We have tool calls!
+        prompt.messages.append(message) # Tool message must immediately follow a message containing "tool_calls".
         for tool_call in message.tool_calls:
-            prompt.messages.append(message) # Tool message must immediately follow a message containing "tool_calls".
             prompt.messages.append({
                 "role": "tool",
                 "tool_call_id": tool_call.id,

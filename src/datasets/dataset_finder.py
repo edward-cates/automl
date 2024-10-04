@@ -18,11 +18,16 @@ class DatasetFinder:
         pass
 
     @staticmethod
-    def find_datasets() -> list[Path]:
+    def list_datasets() -> list[Path]:
         """
         Find all datasets in the cache.
+        This means find directories in the cache_dir (but not their subdirectories).
         """
-        return list(DatasetFinder.cache_dir.glob("**/*"))
+        return [
+            path
+            for path in DatasetFinder.cache_dir.iterdir()
+            if path.is_dir() and not path.name.startswith(".")
+        ]
 
     @staticmethod
     def check_name_exists(name: str) -> bool:
