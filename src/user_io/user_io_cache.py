@@ -1,5 +1,5 @@
 from pathlib import Path
-
+from abc import ABC, abstractmethod
 import torch
 from torch.utils.data import DataLoader
 
@@ -8,7 +8,7 @@ from src.datasets.dataset_finder import DatasetFinder
 from src.models.model_finder import ModelFinder
 from src.llm.chatgpt import Tools, ToolDescriptor, ToolArgument
 
-class UserIoCache(Tools):
+class UserIoCache(Tools, ABC):
 
     class Config:
         arbitrary_types_allowed = True
@@ -22,6 +22,9 @@ class UserIoCache(Tools):
 
     models: dict[str, torch.nn.Module] = dict()
     optimizer: torch.optim.Optimizer | None = None
+
+    gradient_clip: float = 0.5 # todo: parameterize.
+    device: str = "cuda"
 
     @property
     def describe_state_descriptor(self) -> ToolDescriptor:

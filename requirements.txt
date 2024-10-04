@@ -5,3 +5,4 @@ torch==2.4.1
 torchvision==0.19.1
 einops==0.8.0
 resize-right==0.0.2
+tqdm
