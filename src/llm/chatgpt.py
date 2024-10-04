@@ -20,17 +20,52 @@ class Prompt(BaseModel):
         assert role in valid_roles, f"Invalid role: {role=}, must be in {valid_roles=}"
         self.messages.append({"role": role, "content": content})
 
+class ToolArgument(BaseModel):
+    name: str
+    description: str
+    type: str
+
+class ToolDescriptor(BaseModel):
+    name: str
+    description: str
+    arguments: list[ToolArgument] = []
+
+    def render(self) -> dict:
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "strict": True,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        arg.name: {
+                            "type": arg.type,
+                            "description": arg.description,
+                        }
+                        for arg in self.arguments
+                    },
+                    "required": [arg.name for arg in self.arguments],
+                    "additionalProperties": False,
+                }
+            }
+        }
 
 class Tools(BaseModel, ABC):
     @property
     @abstractmethod
-    def descriptors(self) -> list[dict]:
+    def tool_descriptors(self) -> list[ToolDescriptor]:
         pass
 
-    def call(self, function_name: str, kwargs: dict):
-        print(f"[debug:chatgpt] calling {function_name} with {kwargs=}")
+    def render_tool_descriptors(self) -> list[dict]:
+        return [tool.render() for tool in self.tool_descriptors]
+
+    def call(self, function_name: str, kwargs: dict, debug: bool) -> str:
+        if debug:
+            print(f"[debug:chatgpt:tools] calling {function_name} with {kwargs=}")
         callable_function = getattr(self, function_name)
-        return callable_function(**kwargs)
+        return str(callable_function(**kwargs))
 
 
 class ChatGPT:
@@ -53,21 +88,40 @@ class ChatGPT:
             response_format: type[BaseModel],
             tools: Tools | None = None,
             depth: int = 0,
+            debug: bool = False,
     ) -> BaseModel:
         assert depth < 10, "Depth limit reached"
-        response = self.client.beta.chat.completions.parse(
-            model=self.model_name,
-            messages=prompt.messages,
-            response_format=response_format,
-            tools=tools.descriptors if tools else None,
-            tool_choice="auto" if tools else None,
-            temperature=0.0,
-        )
+        if debug:
+            print(f"[debug:chatgpt ({depth=})] asking:")
+            for message in prompt.messages:
+                print(f"  - {message=}")
+        if tools is None:
+            response = self.client.beta.chat.completions.parse(
+                model=self.model_name,
+                messages=prompt.messages,
+                response_format=response_format,
+                temperature=0.0,
+            )
+        else:
+            response = self.client.beta.chat.completions.parse(
+                model=self.model_name,
+                messages=prompt.messages,
+                response_format=response_format,
+                tools=tools.render_tool_descriptors() if tools else None,
+                tool_choice="auto" if tools else None,
+                temperature=0.0,
+            )
         message = response.choices[0].message
-        prompt.messages.append(message)
+        if debug:
+            print(f"[debug:chatgpt ({depth=})] response: {message=}")
         if not message.tool_calls:
+            prompt.messages.append({
+                "role": "assistant",
+                "content": message.content,
+            })
             return message.parsed
         for tool_call in message.tool_calls:
+            prompt.messages.append(message) # Tool message must immediately follow a message containing "tool_calls".
             prompt.messages.append({
                 "role": "tool",
                 "tool_call_id": tool_call.id,
@@ -75,6 +129,7 @@ class ChatGPT:
                 "content": tools.call(
                     function_name=tool_call.function.name,
                     kwargs=tool_call.function.parsed_arguments,
+                    debug=debug,
                 ),
             })
         return self.ask(
@@ -82,6 +137,7 @@ class ChatGPT:
             response_format=response_format,
             tools=tools,
             depth=depth+1,
+            debug=debug,
         )
 
 
@@ -94,27 +150,19 @@ if __name__ == "__main__":
 
     class MyTools(Tools):
         @property
-        def descriptors(self) -> list[dict]:
+        def tool_descriptors(self) -> list[ToolDescriptor]:
             return [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "say_hi",
-                        "description": "Say hi to the name that's given",
-                        "strict": True,
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "name": {
-                                    "type": "string",
-                                    "description": "Make up a random name",
-                                },
-                            },
-                            "required": ["name"],
-                            "additionalProperties": False,
-                        },
-                    },
-                }
+                ToolDescriptor(
+                    name="say_hi",
+                    description="Say hi to the name that's given",
+                    arguments=[
+                        ToolArgument(
+                            name="name",
+                            description="Make up a random name",
+                            type="string",
+                        ),
+                    ],
+                ),
             ]
 
         def say_hi(self, name: str):

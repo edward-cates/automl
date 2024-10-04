@@ -17,11 +17,12 @@ class DatasetFinder:
     def __init__(self):
         pass
 
-    def find_datasets(self) -> list[Path]:
+    @staticmethod
+    def find_datasets() -> list[Path]:
         """
         Find all datasets in the cache.
         """
-        return list(self.cache_dir.glob("**/*"))
+        return list(DatasetFinder.cache_dir.glob("**/*"))
 
     @staticmethod
     def check_name_exists(name: str) -> bool:

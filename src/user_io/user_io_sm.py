@@ -1,28 +1,39 @@
 
-from src.user_io.states.states_enum import StatesEnum
-from src.user_io.user_io_state import UserIoState
-from src.user_io.states.welcome_state import WelcomeState
-from src.user_io.states.dataset_creation.create_dataset_start_state import CreateDatasetStartState
+from pydantic import BaseModel
+
 from src.user_io.user_io_cache import UserIoCache
-from src.user_io.states.dataset_manipulation.load_dataset_state import LoadDatasetState
-from src.user_io.states.dataset_manipulation.dataset_split_state import DatasetSplitState
+from src.llm.chatgpt import ChatGPT, Prompt
+
+class UserPrompt(BaseModel):
+    prompt: str
+    terminate: bool
 
 class UserIoSm:
-
     def __init__(self) -> None:
-        self.cache = UserIoCache()
-        self.current_state: UserIoState = WelcomeState(cache=self.cache)
+        self.llm = ChatGPT()
+        self.user_cache = UserIoCache()
 
-    def step(self) -> None:
-        next_state_enum = self.current_state.run()
+    def run(self) -> None:
+        gpt_prompt = Prompt()
+        gpt_prompt.add("system", f"""Start the chat by summarizing the available tools, then ask the user what they want to do.
+Tool descriptors:
+{self.user_cache.tool_descriptors}
+""")
+        gpt_prompt.add("system", "Keep asking the user what they want to do until they say they want to stop/quit/exit/etc.")
+        user_prompt: UserPrompt = self.llm.ask(
+            prompt=gpt_prompt,
+            response_format=UserPrompt,
+        )
+        print(user_prompt.prompt)
 
-        if next_state_enum == StatesEnum.WELCOME_STATE:
-            self.current_state = WelcomeState(cache=self.cache)
-        elif next_state_enum == StatesEnum.CREATE_DATASET_START_STATE:
-            self.current_state = CreateDatasetStartState(cache=self.cache)
-        elif next_state_enum == StatesEnum.LOAD_DATASET_STATE:
-            self.current_state = LoadDatasetState(cache=self.cache)
-        elif next_state_enum == StatesEnum.DATASET_SPLIT_STATE:
-            self.current_state = DatasetSplitState(cache=self.cache)
-        else:
-            raise ValueError(f"Invalid state: {next_state_enum}")
+        while not user_prompt.terminate:
+            response = input()
+            gpt_prompt.add("user", response)
+            user_prompt = self.llm.ask(
+                prompt=gpt_prompt,
+                response_format=UserPrompt,
+                tools=self.user_cache,
+                debug=False,
+            )
+            print("\n" + user_prompt.prompt)
+
