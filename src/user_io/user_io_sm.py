@@ -2,6 +2,7 @@
 from pydantic import BaseModel
 
 from src.user_io.user_io_cache_project_specific import UserIoCacheProjectSpecific
+from src.user_io.pandas_io_cache import PandasIoCache
 from src.llm.chatgpt import ChatGPT, Prompt
 
 class UserPrompt(BaseModel):
@@ -11,7 +12,7 @@ class UserPrompt(BaseModel):
 class UserIoSm:
     def __init__(self) -> None:
         self.llm = ChatGPT()
-        self.user_cache = UserIoCacheProjectSpecific()
+        self.user_cache = PandasIoCache()
 
     def run(self) -> None:
         gpt_prompt = Prompt()

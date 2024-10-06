@@ -54,10 +54,15 @@ class ToolDescriptor(BaseModel):
         }
 
 class Tools(BaseModel, ABC):
+    class Config:
+        arbitrary_types_allowed = True
+
     @property
-    @abstractmethod
     def tool_descriptors(self) -> list[ToolDescriptor]:
-        pass
+        return [
+            getattr(self, attr) for attr in dir(self)
+            if attr.endswith("_descriptor")
+        ]
 
     def render_tool_descriptors(self) -> list[dict]:
         return [tool.render() for tool in self.tool_descriptors]

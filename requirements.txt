@@ -7,3 +7,6 @@ einops==0.8.0
 resize-right==0.0.2
 tqdm
 numpy
+pyav==13.0.0
+pandas==2.2.3
+pyarrow==17.0.0
