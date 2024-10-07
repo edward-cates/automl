@@ -58,12 +58,12 @@ class ToolArgument(BaseModel):
         """
         `type` is like `dict[<subtype1>, <subtype2>]`.
         """
+        raise NotImplementedError(f"Dict types not yet supported: {self.type=} - haven't figured this out.")
         open_bracket_index = self.type.index("[")
         close_bracket_index = self.type.index("]")
         subtypes = self.type[open_bracket_index + 1:close_bracket_index].split(",")
         key_type = subtypes[0].strip()
         value_type = subtypes[1].strip()
-        raise NotImplementedError(f"Dict types not yet supported: {self.type=} - haven't figured this out.")
         return {
             "type": "object",
             "properties": {

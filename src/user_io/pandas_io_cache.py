@@ -1,7 +1,9 @@
 from pathlib import Path
 import json
-
+import numpy as np
 import pandas as pd
+
+from src.user_io.session_cache import SessionCache, CacheObject
 from src.llm.chatgpt import Tools, ToolDescriptor, ToolArgument
 
 class PandasIoCache(Tools):
@@ -9,209 +11,105 @@ class PandasIoCache(Tools):
     Cache for pandas dataframes.
     """
 
-    dataframes: dict[str, pd.DataFrame] = dict()
+    cache: SessionCache = SessionCache(
+        cache=dict(
+            starting_df=CacheObject(
+                description="The base dataframe",
+                value=pd.read_csv("/home/edward/ste001/domo_datasets/5284a372-c323-4d77-af30-d9c4d1b2624c.csv"),
+                type_name="pd.DataFrame",
+            )
+        )
+    )
 
     @property
-    def describe_current_state_descriptor(self) -> ToolDescriptor:
+    def describe_cache_descriptor(self) -> ToolDescriptor:
         return ToolDescriptor(
-            name="describe_current_state",
-            description="Describe the current state of the cache.",
+            name="describe_cache",
+            description="Describe the contents of the cache",
+            arguments=[],
         )
-    def describe_current_state(self) -> dict:
-        """
-        For each dataframe, return
-        - the key,
-        - the shape,
-        - the columns.
-        """
-        return {
-            key: self._describe_dataframe(df)
-            for key, df in self.dataframes.items()
-        }
-    
-    @staticmethod
-    def _describe_dataframe(df: pd.DataFrame) -> dict:
-        return {
-            "shape": df.shape,
-            "columns": df.columns.tolist(),
-        }
-
-    @property
-    def read_dataframe_descriptor(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name="read_dataframe",
-            description="Read a dataframe from a file and store it in the cache.",
-            arguments=[
-                ToolArgument(
-                    name="filepath",
-                    description="Path to the file to read. Supported formats: .feather, .parquet, .csv",
-                    type="string"
-                ),
-                ToolArgument(
-                    name="key",
-                    description="Key to store the dataframe under in the cache",
-                    type="string"
-                )
-            ]
-        )
-    def read_dataframe(self, filepath: str, key: str) -> str:
-        path = Path(filepath)
-        if not path.exists():
-            return f"Error: File {filepath} does not exist."
-
-        try:
-            if path.suffix == '.feather':
-                df = pd.read_feather(path)
-            elif path.suffix == '.parquet':
-                df = pd.read_parquet(path)
-            elif path.suffix == '.csv':
-                df = pd.read_csv(path)
-            else:
-                return f"Error: Unsupported file format. Supported formats are .feather, .parquet, and .csv"
-
-            self.dataframes[key] = df
-            return f"Successfully read dataframe from {filepath} and stored it under key '{key}': {self._describe_dataframe(df)}"
-        except Exception as e:
-            return f"Error reading file: {str(e)}"
+    def describe_cache(self) -> str:
+        return self.cache.describe()
 
     @property
     def preview_dataframe_descriptor(self) -> ToolDescriptor:
         return ToolDescriptor(
             name="preview_dataframe",
-            description="Get a text-based preview of a dataframe stored in the cache.",
+            description="Preview a dataframe stored in the cache and return it as a string",
             arguments=[
                 ToolArgument(
-                    name="key",
-                    description="Key of the dataframe in the cache to preview",
-                    type="string"
+                    name="cache_key",
+                    description="The cache key of the dataframe to preview",
+                    type="string",
                 ),
                 ToolArgument(
                     name="num_rows",
-                    description="Number of rows to preview (default is 5)",
-                    type="integer"
+                    description="Number of rows to preview (default: 5)",
+                    type="integer",
                 ),
                 ToolArgument(
                     name="num_cols",
-                    description="Number of columns to preview (default is 10)",
-                    type="integer"
-                )
-            ]
+                    description="Number of columns to preview (default: 10)",
+                    type="integer",
+                ),
+            ],
         )
-    def preview_dataframe(self, key: str, num_rows: int = 5, num_cols: int = 10) -> str:
-        if key not in self.dataframes:
-            return f"Error: No dataframe found with key '{key}'"
-
-        df = self.dataframes[key]
-
-        cols = df.columns.tolist()[:num_cols]
-
-        preview = df.head(num_rows)[cols].to_string()
+    def preview_dataframe(self, cache_key: str, num_rows: int = 5, num_cols: int = 10) -> str:
+        if cache_key not in self.cache.cache:
+            return f"Error: No dataframe found in cache with key '{cache_key}'"
         
-        return f"Preview of dataframe '{key}' (first {num_rows} rows):\n\n{preview}"
+        df = self.cache.get(cache_key).value
+        if not isinstance(df, pd.DataFrame):
+            return f"Error: The object with key '{cache_key}' is not a pandas DataFrame"
+        
+        preview_df = df.head(num_rows)
+        if num_cols is not None:
+            preview_df = preview_df.iloc[:, :num_cols]
+        
+        preview = preview_df.to_string()
+        total_rows, total_cols = df.shape
+        cols_shown = preview_df.shape[1]
+        
+        return (f"Preview of '{cache_key}' ({total_rows} rows x {total_cols} columns total):\n"
+                f"Showing {num_rows} rows and {cols_shown} columns\n\n{preview}")
 
     @property
-    def group_by_and_simple_aggregate_descriptor(self) -> ToolDescriptor:
+    def exec_python_code_descriptor(self) -> ToolDescriptor:
         return ToolDescriptor(
-            name="group_by_and_simple_aggregate",
-            description="Group a dataframe by specified columns and perform simple aggregations (simple means can be described just with a string).",
+            name="exec_python_code",
+            description="Execute Python code and assign the result to a variable in the cache",
             arguments=[
                 ToolArgument(
-                    name="key",
-                    description="Key of the dataframe in the cache to perform operations on",
-                    type="string"
+                    name="code",
+                    description="The Python code to execute.",
+                    type="string",
                 ),
                 ToolArgument(
-                    name="group_by",
-                    description="List of column names to group by",
-                    type="list[str]"
+                    name="output_variable_name",
+                    description="The name of the variable to store the result of the execution. Be specific to avoid later conflicts or ambiguity.",
+                    type="string",
                 ),
                 ToolArgument(
-                    name="agg_dict",
-                    description="""Dictionary (as JSON!) specifying the aggregation operations to perform.
-                    Keys are column names, values are aggregation functions as strings.
-                    Examples:
-                    - {'column1': 'sum', 'column2': 'mean'}
-                    - {'sales': 'sum', 'price': 'max', 'quantity': 'mean'}
-                    Supported aggregation functions: 'sum', 'mean', 'median', 'min', 'max', 'count', 'std', 'var', 'nunique', and any other pandas aggregation function.""",
-                    type="string"
-                )
-            ]
+                    name="output_variable_description",
+                    description="A description of the variable to store the result of the execution. Be specific to avoid later conflicts or ambiguity.",
+                    type="string",
+                ),
+            ],
         )
-    def group_by_and_simple_aggregate(
-            self,
-            key: str,
-            group_by: list[str],
-            # agg_dict: dict[str, str],
-            agg_dict: str,
-    ) -> str:
-        """
-        Group by the given columns and aggregate using the given dictionary.
-        """
-        df = self.dataframes[key]
-        grouped = df.groupby(group_by).agg(json.loads(agg_dict)).reset_index()
-        new_key = f"{key}_grouped_by_"
-        for col in group_by:
-            new_key += f"{col}_"
-        new_key = new_key[:-1]
-        self.dataframes[new_key] = grouped
-        return f"Successfully grouped by {group_by} and aggregated using {agg_dict}, " \
-               f"results stored in dataframe '{new_key}': {self._describe_dataframe(grouped)}"
-
-    @property
-    def value_counts_descriptor(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name="value_counts",
-            description="Compute value counts for a specified column in a dataframe.",
-            arguments=[
-                ToolArgument(
-                    name="key",
-                    description="Key of the dataframe in the cache to perform operations on",
-                    type="string"
-                ),
-                ToolArgument(
-                    name="column",
-                    description="Name of the column to compute value counts for",
-                    type="string"
-                ),
-                ToolArgument(
-                    name="normalize",
-                    description="If True, returns proportions instead of frequencies",
-                    type="boolean"
-                ),
-                ToolArgument(
-                    name="sort",
-                    description="If True, sort the result in descending order",
-                    type="boolean"
-                )
-            ]
+    def exec_python_code(self, code: str, output_variable_name: str, output_variable_description: str) -> str:
+        # It's important that any exceptions get raised, so don't catch them here.
+        exec(
+            code,
+            {"pd": pd, "np": np},
+            { key: item.value for key, item in self.cache.cache.items() },
         )
-
-    def value_counts(
-            self,
-            key: str,
-            column: str,
-            normalize: bool = False,
-            sort: bool = True
-    ) -> str:
-        """
-        Compute value counts for a specified column in a dataframe.
-        """
-        if key not in self.dataframes:
-            return f"Error: No dataframe found with key '{key}'"
-
-        df = self.dataframes[key]
-        if column not in df.columns:
-            return f"Error: Column '{column}' not found in dataframe '{key}'"
-
-        try:
-            value_counts = df[column].value_counts(normalize=normalize, sort=sort)
-            result_df = value_counts.reset_index()
-            result_df.columns = [column, 'count']
-            
-            self.dataframes[f"{key}_value_counts_{column}"] = result_df
-            
-            return f"Successfully computed value counts for column '{column}' in dataframe '{key}'. " \
-                   f"Results stored in new dataframe '{key}_value_counts_{column}': \n{result_df.head().to_string()}"
-        except Exception as e:
-            return f"Error computing value counts: {str(e)}"
+        exec(f"result = {output_variable_name}")
+        self.cache.set(output_variable_name, CacheObject(
+            description=output_variable_description,
+            value=result,
+            type_name=type(result).__name__,
+        ))
+        msg = f"Successfully stored the result of the execution in '{output_variable_name}': {str(result)}"
+        print(f"[debug:pandas_io_cache] {msg}")
+        return msg
 

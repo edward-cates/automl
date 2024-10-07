@@ -9,6 +9,9 @@ from src.models.model_finder import ModelFinder
 from src.llm.chatgpt import Tools, ToolDescriptor, ToolArgument
 
 class UserIoCache(Tools, ABC):
+    """
+    Class deprecated Oct 6 2024
+    """
 
     class Config:
         arbitrary_types_allowed = True
