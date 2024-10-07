@@ -77,7 +77,10 @@ class PandasIoCache(Tools):
     def exec_python_code_descriptor(self) -> ToolDescriptor:
         return ToolDescriptor(
             name="exec_python_code",
-            description="Execute Python code and assign the result to a variable in the cache",
+            description="""Execute Python code and assign the result to a variable in the cache.
+            BE SURE THE GIVEN CODE ASSIGNS THE SPECIFIED OUTPUT VARIABLE!!! (e.g. <output_variable_name> = <result>)
+            If the code does not assign the specified output variable, an error will be thrown.
+            If the code does not assign an output variable (e.g. inplace dataframe edits), pass 'NOT_APPLICABLE' as the output_variable_name.""",
             arguments=[
                 ToolArgument(
                     name="code",
@@ -86,7 +89,9 @@ class PandasIoCache(Tools):
                 ),
                 ToolArgument(
                     name="output_variable_name",
-                    description="The name of the variable to store the result of the execution. Be specific to avoid later conflicts or ambiguity.",
+                    description="""If applicable, The name of the variable to store the result of the execution.
+                    Be specific to avoid later conflicts or ambiguity.
+                    If not applicable (e.g. inplace dataframe edits), pass "NOT_APPLICABLE" here.""",
                     type="string",
                 ),
                 ToolArgument(
@@ -98,12 +103,18 @@ class PandasIoCache(Tools):
         )
     def exec_python_code(self, code: str, output_variable_name: str, output_variable_description: str) -> str:
         # It's important that any exceptions get raised, so don't catch them here.
+        if output_variable_name != "NOT_APPLICABLE":
+            assert f"{output_variable_name} = " in code, f"Error: The code does not assign the output variable {output_variable_name}"
+        locals_copy = locals()
+        locals_copy.update({ key: item.value for key, item in self.cache.cache.items() })
         exec(
             code,
-            {"pd": pd, "np": np},
-            { key: item.value for key, item in self.cache.cache.items() },
+            globals(),
+            locals_copy,
         )
-        exec(f"result = {output_variable_name}")
+        if output_variable_name == "NOT_APPLICABLE":
+            return "Successfully executed the code."
+        result = locals_copy[output_variable_name]
         self.cache.set(output_variable_name, CacheObject(
             description=output_variable_description,
             value=result,

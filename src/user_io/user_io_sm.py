@@ -24,6 +24,8 @@ class UserIoSm:
         gpt_prompt.add("system", """If you need input from the user to complete a task,
         ask for the needed information. Start the conversation by describing the cache state
         and then asking the user what they want to do.""")
+        gpt_prompt.add("system", """If you don't know how to fix an error,
+        just quit - don't try the same thing repeatedly.""")
         user_prompt: BaseModel = self.llm.ask(
             prompt=gpt_prompt,
             response_format=UserPrompt,
