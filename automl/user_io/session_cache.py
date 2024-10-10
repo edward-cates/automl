@@ -1,4 +1,5 @@
 
+import pandas as pd
 from pydantic import BaseModel
 
 class CacheObject(BaseModel):
@@ -8,6 +9,16 @@ class CacheObject(BaseModel):
     description: str
     value: object
     type_name: str
+
+    def preview_value(self) -> str:
+        if isinstance(self.value, pd.DataFrame):
+            return self._preview_dataframe()
+        else:
+            return str(self.value)
+
+    def _preview_dataframe(self) -> str:
+        assert isinstance(self.value, pd.DataFrame)
+        return f"{self.value.shape=}, ({self.value.columns=}"
 
 class SessionCache(BaseModel):
     """
@@ -27,6 +38,6 @@ class SessionCache(BaseModel):
 
     def describe(self) -> str:
         return "\n".join([
-            f"{key}: {cache_obj.description} (value: {str(cache_obj.value)})"
+            f"{key}: {cache_obj.description} (value: {cache_obj.preview_value()})"
             for key, cache_obj in self.cache.items()
         ])

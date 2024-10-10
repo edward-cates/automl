@@ -2,6 +2,7 @@ from pathlib import Path
 import json
 import numpy as np
 import pandas as pd
+from tqdm.auto import tqdm
 
 from src.user_io.session_cache import SessionCache, CacheObject
 from src.llm.chatgpt import Tools, ToolDescriptor, ToolArgument
@@ -11,15 +12,7 @@ class PandasIoCache(Tools):
     Cache for pandas dataframes.
     """
 
-    cache: SessionCache = SessionCache(
-        cache=dict(
-            starting_df=CacheObject(
-                description="The base dataframe",
-                value=pd.read_csv("/home/edward/ste001/domo_datasets/5284a372-c323-4d77-af30-d9c4d1b2624c.csv"),
-                type_name="pd.DataFrame",
-            )
-        )
-    )
+    cache: SessionCache = SessionCache()
 
     @property
     def describe_cache_descriptor(self) -> ToolDescriptor:
@@ -70,8 +63,43 @@ class PandasIoCache(Tools):
         total_rows, total_cols = df.shape
         cols_shown = preview_df.shape[1]
         
-        return (f"Preview of '{cache_key}' ({total_rows} rows x {total_cols} columns total):\n"
+        print (f"Preview of '{cache_key}' ({total_rows} rows x {total_cols} columns total):\n"
                 f"Showing {num_rows} rows and {cols_shown} columns\n\n{preview}")
+        
+        return f"Preview of '{cache_key}' ({total_rows} rows x {total_cols} columns total) has been shown to the user."
+
+    @property
+    def save_dataframe_as_csv_descriptor(self) -> ToolDescriptor:
+        return ToolDescriptor(
+            name="save_dataframe_as_csv",
+            description="Save a dataframe from the cache as a CSV file",
+            arguments=[
+                ToolArgument(
+                    name="cache_key",
+                    description="The cache key of the dataframe to save",
+                    type="string",
+                ),
+                ToolArgument(
+                    name="file_path",
+                    description="The file path where the CSV should be saved",
+                    type="string",
+                ),
+            ],
+        )
+
+    def save_dataframe_as_csv(self, cache_key: str, file_path: str) -> str:
+        if cache_key not in self.cache.cache:
+            return f"Error: No dataframe found in cache with key '{cache_key}'"
+        
+        df = self.cache.get(cache_key).value
+        if not isinstance(df, pd.DataFrame):
+            return f"Error: The object with key '{cache_key}' is not a pandas DataFrame"
+        
+        try:
+            df.to_csv(file_path, index=False)
+            return f"Successfully saved dataframe '{cache_key}' to {file_path}"
+        except Exception as e:
+            return f"Error saving dataframe to CSV: {str(e)}"
 
     @property
     def exec_python_code_descriptor(self) -> ToolDescriptor:
@@ -120,7 +148,7 @@ class PandasIoCache(Tools):
             value=result,
             type_name=type(result).__name__,
         ))
-        msg = f"Successfully stored the result of the execution in '{output_variable_name}': {str(result)}"
+        msg = f"Successfully stored the result of the execution in '{output_variable_name}'"
         print(f"[debug:pandas_io_cache] {msg}")
         return msg
 

@@ -1,8 +1,10 @@
+from pathlib import Path
 
+import pandas as pd
 from pydantic import BaseModel
 
 from src.user_io.user_io_cache_project_specific import UserIoCacheProjectSpecific
-from src.user_io.pandas_io_cache import PandasIoCache
+from src.user_io.pandas_io_cache import PandasIoCache, CacheObject
 from src.llm.chatgpt import ChatGPT, Prompt
 
 class UserPrompt(BaseModel):
@@ -10,9 +12,16 @@ class UserPrompt(BaseModel):
     terminate: bool
 
 class UserIoSm:
-    def __init__(self) -> None:
+    def __init__(self, csv_path: str) -> None:
         self.llm = ChatGPT()
         self.user_cache = PandasIoCache()
+        assert Path(csv_path).exists(), f"CSV path {csv_path} does not exist"
+        print(f"[debug:user_io_sm] csv_path found: {csv_path}")
+        self.user_cache.cache.set("starting_df", CacheObject(
+            description="The base dataframe",
+            value=pd.read_csv(csv_path),
+            type_name="pd.DataFrame",
+        ))
 
     def run(self) -> None:
         gpt_prompt = Prompt()

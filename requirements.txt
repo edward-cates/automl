@@ -10,3 +10,4 @@ numpy
 pyav==13.0.0
 pandas==2.2.3
 pyarrow==17.0.0
+plotly
