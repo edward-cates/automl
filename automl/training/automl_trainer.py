@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Callable
 
 from tqdm.auto import tqdm
 import numpy as np
@@ -14,11 +14,11 @@ class AutomlTrainer:
     """
     def __init__(
             self,
-            model: AutomlModel,
+            model: torch.nn.Module,
             samples: list[AutomlSample],
-            forward: callable[[Any, torch.nn.Module], torch.Tensor],
-            loss_fn: callable[[Any, Any], torch.Tensor],
-            eval_fn: callable[[list[np.ndarray]], dict[str, float]],
+            forward: Callable[[Any, torch.nn.Module], torch.Tensor],
+            loss_fn: Callable[[Any, Any], torch.Tensor],
+            eval_fn: Callable[[list[np.ndarray]], dict[str, float]],
             batch_size: int = 2,
             data_split_ratio: float = 0.8,
             optimizer_kwargs: dict = dict(
@@ -30,7 +30,7 @@ class AutomlTrainer:
         :loss_fn: Takes (a) data batch, (b) model's output, returns the loss.
         :eval_fn: Takes (a) list of all model's outputs for the epoch (as numpy arrays), returns a dictionary of metrics.
         """
-        self.model = model
+        self.model = AutomlModel(model)
         self.dataset = AutomlDataset(samples)
         self.functions = dict(
             forward=forward,

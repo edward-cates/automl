@@ -1,19 +1,18 @@
 from pathlib import Path
-from abc import ABC, abstractmethod
 from typing import Any
 
 import torch
 
-class AutomlModel(torch.nn.Module, ABC):
-    def __init__(self):
+class AutomlModel(torch.nn.Module):
+    def __init__(self, torch_model: torch.nn.Module):
         super().__init__()
+        self.torch_model = torch_model
 
-    @abstractmethod
     def forward(self, *args, **kwargs) -> Any:
-        pass
+        return self.torch_model(*args, **kwargs)
 
     def save(self, path: Path) -> None:
-        torch.save(self.state_dict(), path)
+        torch.save(self.torch_model.state_dict(), path)
 
     def load(self, path: Path) -> None:
-        self.load_state_dict(torch.load(path))
+        self.torch_model.load_state_dict(torch.load(path))

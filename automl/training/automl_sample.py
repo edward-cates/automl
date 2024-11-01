@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Any
 
 class AutomlSample(ABC):
     """
@@ -8,5 +9,5 @@ class AutomlSample(ABC):
         pass
 
     @abstractmethod
-    def get_model_input(self):
+    def get_model_input(self) -> Any:
         pass
