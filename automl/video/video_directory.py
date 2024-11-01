@@ -10,10 +10,11 @@ class VideoDirectory:
             self,
             image_dir: Path,
             labels: dict[int, int],
-            image_padding: tuple[int, int] = (0, 0),
-            label_padding: tuple[int, int] = (0, 0),
-            file_stem_formatter: str = "image_{frame_number:05d}",
-            extension: str = "png",
+            image_padding: tuple[int, int] = (4, 4),
+            label_padding: tuple[int, int] = (1, 1),
+            file_stem_formatter: str = "image_{frame_number:04d}",
+            extension: str = "jpg",
+            image_resize: tuple[int, int] | None = (512, 512),
     ):
         """
         :labels: A dictionary mapping frame numbers to labels.
@@ -25,6 +26,8 @@ class VideoDirectory:
         self.label_padding = label_padding
         self.file_stem_formatter = file_stem_formatter
         self.extension = extension
+        self.image_resize = image_resize
+        # Prepare.
         self.frame_count = len(list(self.image_dir.glob(f"*.{extension}")))
         # assert that all label values are >0.
         assert all(label > 0 for label in self.labels.values()), "All label values must be >0 (0 is reserved for no-class)"
@@ -49,6 +52,7 @@ class VideoDirectory:
             pad_after=self.image_padding[1],
             file_stem_formatter=self.file_stem_formatter,
             extension=self.extension,
+            image_resize=self.image_resize,
         )
 
     def _figure_out_label(self, frame_number: int) -> int:

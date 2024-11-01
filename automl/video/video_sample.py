@@ -16,6 +16,7 @@ class VideoSample(AutomlSample):
             pad_after: int,
             file_stem_formatter: str,
             extension: str,
+            image_resize: tuple[int, int] | None,
     ):
         super().__init__()
         self.image_dir = image_dir
@@ -26,6 +27,7 @@ class VideoSample(AutomlSample):
         self.pad_after = pad_after
         self.file_stem_formatter = file_stem_formatter
         self.extension = extension
+        self.image_resize = image_resize
 
     def get_model_input(self) -> tuple[torch.Tensor, int]:
         return self._get_image_stack(), self.label
@@ -41,8 +43,9 @@ class VideoSample(AutomlSample):
             for n in range(self.frame_number - self.pad_before, self.frame_number + self.pad_after + 1)
         ]
 
-    @staticmethod
-    def _path_to_tensor(path: Path) -> torch.Tensor:
+    def _path_to_tensor(self, path: Path) -> torch.Tensor:
         assert path.exists(), f"Image path {path} does not exist"
         rgb_image = torchvision.io.read_image(path.as_posix())
+        if self.image_resize is not None:
+            rgb_image = torchvision.transforms.Resize(self.image_resize)(rgb_image)
         return rgb_image.float() / 255.0
