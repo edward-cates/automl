@@ -48,6 +48,7 @@ class AutomlTrainer:
         self.loss_fn = loss_fn
         self.step_save_fn = step_save_fn
         self.eval_fn = eval_fn
+        self.batch_size = batch_size
         # Prepare.
         self.optimizer = torch.optim.AdamW(self.model.parameters(), **optimizer_kwargs)
         if test_samples is not None:
@@ -61,10 +62,18 @@ class AutomlTrainer:
         self.epoch_number = 0
         self.metrics_over_time = list()
 
-    def run_full_epoch(self, break_at: int | None = None) -> dict[str, float]:
+    def run_over_data(self, samples: Sequence, break_at: int | None = None) -> dict[str, float]:
+        dataset = AutomlDataset(samples)
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=self.batch_size, shuffle=False)
+        with torch.no_grad():
+            return self._epoch_inner(dataloader, is_train=False, break_at=break_at)
+
+    def run_full_epoch(self, break_at: int | tuple[int, int] | None = None) -> dict[str, float]:
+        break_at_train = break_at[0] if isinstance(break_at, tuple) else break_at
+        break_at_test = break_at[1] if isinstance(break_at, tuple) else break_at
         self.metrics_over_time.append(dict(
-            train=self.run_train_epoch(break_at=break_at),
-            test=self.run_test_epoch(break_at=break_at),
+            train=self.run_train_epoch(break_at=break_at_train),
+            test=self.run_test_epoch(break_at=break_at_test),
         ))
         self.epoch_number += 1
         return self.metrics_over_time[-1]

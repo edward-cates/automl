@@ -4,6 +4,37 @@ from tqdm.auto import tqdm
 import pandas as pd
 import torch
 
+"""
+TODO - Some test code:
+
+test_df = pd.DataFrame({
+    "times": [2,4,1,3,4],
+    "groups": ["A", "A", "B", "B", "B"],
+    "y": [2,3,4,5,6],
+    "x1": [.2,.3,.4,.5,.6],
+    "x2": [.02,.03,.04,.05,.06],
+})
+
+display(test_df.iloc[0:2])
+
+test_tsdf = TimeSeriesDataFrame(
+    df=test_df,
+    time_col="times",
+    time_increment=1,
+    group_col="groups",
+    feature_cols=["x1", "x2"],
+    y_col="y",
+    min_seq_len=2,
+    max_seq_len=2,
+)
+
+for tmpdf in test_tsdf._groups:
+    display(tmpdf)
+
+print(len(test_tsdf))
+test_tsdf[0]
+"""
+
 class TimeSeriesDataFrame(Sequence):
     """
     A class to help with operations on a time series dataframe,
