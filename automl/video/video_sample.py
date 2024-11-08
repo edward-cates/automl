@@ -4,9 +4,7 @@ import einops
 import torch
 import torchvision
 
-from automl.training.automl_sample import AutomlSample
-
-class VideoSample(AutomlSample):
+class VideoSample:
     def __init__(
             self,
             image_dir: Path,
@@ -29,7 +27,7 @@ class VideoSample(AutomlSample):
         self.extension = extension
         self.image_resize = image_resize
 
-    def get_model_input(self) -> tuple[torch.Tensor, int]:
+    def get_torch_data(self) -> tuple[torch.Tensor, int]:
         return self._get_image_stack(), self.label
 
     def _get_image_stack(self) -> torch.Tensor:

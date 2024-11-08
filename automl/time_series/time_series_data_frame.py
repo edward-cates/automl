@@ -1,8 +1,10 @@
-import itertools
+from collections.abc import Sequence
+
 from tqdm.auto import tqdm
 import pandas as pd
 import torch
-class TimeSeriesDataFrame:
+
+class TimeSeriesDataFrame(Sequence):
     """
     A class to help with operations on a time series dataframe,
     which can get confusing real quick.
@@ -56,6 +58,10 @@ class TimeSeriesDataFrame:
         assert len(group_indexes) == len(sample_indexes), f"Internal bug: {len(group_indexes)=} != {len(sample_indexes)=}"
         return group_indexes, sample_indexes
 
+    @property
+    def feature_count(self) -> int:
+        return len(self.feature_cols)
+
     def __len__(self) -> int:
         return len(self._group_indexes)
 
@@ -77,8 +83,8 @@ class TimeSeriesDataFrame:
         target_value = data.iloc[-1][self.y_col]
         assert pd.notna(target_value), "Target value is NaN."
         return (
-            torch.tensor(data[self.feature_cols].fillna(self.fillna).values),
-            torch.tensor(target_value),
+            torch.tensor(data[self.feature_cols].fillna(self.fillna).values, dtype=torch.float32),
+            torch.tensor(target_value, dtype=torch.float32),
         )
 
     # Private.

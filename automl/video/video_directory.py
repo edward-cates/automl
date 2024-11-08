@@ -1,8 +1,10 @@
+from collections.abc import Sequence
 from pathlib import Path
 
+import torch
 from automl.video.video_sample import VideoSample
 
-class VideoDirectory:
+class VideoDirectory(Sequence):
     """
     A directory containing video frames.
     """
@@ -32,15 +34,16 @@ class VideoDirectory:
         self.frame_count = len(list(self.image_dir.glob(f"*.{extension}")))
         assert self.label_padding[0] <= self.image_padding[0], "Label padding before must be <= image padding before"
         assert self.label_padding[1] <= self.image_padding[1], "Label padding after must be <= image padding after"
+        self._frame_numbers = list(range(
+            self.image_padding[0],
+            self.frame_count - self.image_padding[1],
+        ))
 
-    def get_samples(self) -> list[VideoSample]:
-        return [
-            self._create_video_sample(frame_number)
-            for frame_number in range(
-                self.image_padding[0],
-                self.frame_count - self.image_padding[1],
-            )
-        ]
+    def __len__(self) -> int:
+        return len(self._frame_numbers)
+
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, int]:
+        return self._create_video_sample(self._frame_numbers[idx]).get_torch_data()
 
     def _create_video_sample(self, frame_number: int) -> VideoSample:
         return VideoSample(
