@@ -8,7 +8,7 @@ class VideoDirectory:
     """
     def __init__(
             self,
-            image_dir: Path,
+            image_dir: Path | str,
             labels: dict[int, int],
             image_padding: tuple[int, int] = (4, 4),
             label_padding: tuple[int, int] = (1, 1),
@@ -19,18 +19,17 @@ class VideoDirectory:
         """
         :labels: A dictionary mapping frame numbers to labels.
         """
-        self.image_dir = image_dir
+        self.image_dir = Path(image_dir)
         assert self.image_dir.exists(), f"Image directory {self.image_dir} does not exist"
         self.labels = labels
         self.image_padding = image_padding
         self.label_padding = label_padding
         self.file_stem_formatter = file_stem_formatter
+        assert "frame_number" in file_stem_formatter, "File stem formatter must contain 'frame_number'"
         self.extension = extension
         self.image_resize = image_resize
         # Prepare.
         self.frame_count = len(list(self.image_dir.glob(f"*.{extension}")))
-        # assert that all label values are >0.
-        assert all(label > 0 for label in self.labels.values()), "All label values must be >0 (0 is reserved for no-class)"
         assert self.label_padding[0] <= self.image_padding[0], "Label padding before must be <= image padding before"
         assert self.label_padding[1] <= self.image_padding[1], "Label padding after must be <= image padding after"
 
