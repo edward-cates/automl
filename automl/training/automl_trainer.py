@@ -1,3 +1,4 @@
+from collections import deque
 from collections.abc import Sequence
 from typing import Any, Callable
 
@@ -92,6 +93,7 @@ class AutomlTrainer:
             self.model.eval()
         step_save_outputs = []
         total_loss = 0
+        loss_tail = deque(maxlen=100)
         train_or_test = "Train" if is_train else "Test"
         pbar = tqdm(dataloader, desc=f"{train_or_test} Epoch {self.epoch_number}", total=len(dataloader))
         for batch in pbar:
@@ -99,12 +101,13 @@ class AutomlTrainer:
             outputs = self.forward_fn(batch, self.model)
             loss = self.loss_fn(batch, outputs)
             total_loss += loss.item()
+            loss_tail.append(loss.item())
             if is_train:
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
             step_save_outputs.append(self.step_save_fn(batch, outputs))
-            pbar.set_postfix(loss=total_loss / len(step_save_outputs))
+            pbar.set_postfix(loss=total_loss / len(step_save_outputs), loss_tail=np.mean(loss_tail))
             if break_at is not None and len(step_save_outputs) >= break_at:
                 print(f"WARNING: Breaking at {len(step_save_outputs)} steps.")
                 break
