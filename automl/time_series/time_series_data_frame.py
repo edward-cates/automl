@@ -52,6 +52,7 @@ class TimeSeriesDataFrame(Sequence):
             feature_cols: list[str],
             fillna: float = -1.0,
             min_seq_len: int = 10, # Sets size of smallest sample that can be made.
+            step_size: int = 1,
             max_seq_len: int | None = None,
     ):
         self.df = df.sort_values(by=[group_col, time_col]).reset_index(drop=True)
@@ -62,32 +63,13 @@ class TimeSeriesDataFrame(Sequence):
         self.feature_cols = feature_cols
         self.fillna = fillna
         self.min_seq_len = min_seq_len
+        self.step_size = step_size
         self.max_seq_len = max_seq_len
         if self.max_seq_len is not None:
             assert self.max_seq_len >= self.min_seq_len, f"Internal bug: {self.max_seq_len=} < {self.min_seq_len=}"
         self._validate()
         self._groups: list[pd.DataFrame] = self._split_groups()
         self._group_indexes, self._sample_indexes = self._map_indexes()
-
-    def _map_indexes(self) -> tuple[list[int], list[int]]:
-        """
-        Returns a list of length (num_samples),
-        where each value is the index of the group that the sample belongs to
-        and a list of length (num_samples),
-        where each value is the index of the sample within its group.
-        """
-        group_indexes = []
-        sample_indexes = []
-
-        for group_idx, group in tqdm(enumerate(self._groups), total=len(self._groups), desc="Mapping indexes"):
-            target_values = group[self.y_col].values
-            for sample_idx in range(0, len(group) - self.min_seq_len + 1):
-                if pd.notna(target_values[sample_idx + self.min_seq_len - 1]):
-                    group_indexes.append(group_idx)
-                    sample_indexes.append(sample_idx)
-
-        assert len(group_indexes) == len(sample_indexes), f"Internal bug: {len(group_indexes)=} != {len(sample_indexes)=}"
-        return group_indexes, sample_indexes
 
     @property
     def feature_count(self) -> int:
@@ -100,7 +82,7 @@ class TimeSeriesDataFrame(Sequence):
         """
         Returns (
             time-series frame of (seq_len, num_features),
-            target value
+            target values (has shape (seq_len,))
         )
         """
         group_idx = self._group_indexes[idx]
@@ -111,11 +93,9 @@ class TimeSeriesDataFrame(Sequence):
         assert len(data) >= self.min_seq_len, f"Internal bug: {len(data)=} < {self.min_seq_len=}"
         if self.max_seq_len is not None:
             assert len(data) <= self.max_seq_len, f"Internal bug: {len(data)=} > {self.max_seq_len=}"
-        target_value = data.iloc[-1][self.y_col]
-        assert pd.notna(target_value), "Target value is NaN."
         return (
             torch.tensor(data[self.feature_cols].fillna(self.fillna).values, dtype=torch.float32),
-            torch.tensor(target_value, dtype=torch.float32),
+            torch.tensor(data[self.y_col].fillna(self.fillna).values, dtype=torch.float32),
         )
 
     # Private.
@@ -125,6 +105,24 @@ class TimeSeriesDataFrame(Sequence):
         assert self.group_col in self.df.columns, "Group column not in dataframe."
         assert self.y_col in self.df.columns, "Y column not in dataframe."
         assert all(col in self.df.columns for col in self.feature_cols), "All feature columns must be in dataframe."
+
+    def _map_indexes(self) -> tuple[list[int], list[int]]:
+        """
+        Returns a list of length (num_samples),
+        where each value is the index of the group that the sample belongs to
+        and a list of length (num_samples),
+        where each value is the index of the sample within its group.
+        """
+        group_indexes = []
+        sample_indexes = []
+
+        for group_idx, group in tqdm(enumerate(self._groups), total=len(self._groups), desc="Mapping indexes"):
+            for sample_idx in range(0, len(group) - self.min_seq_len + 1, self.step_size):
+                group_indexes.append(group_idx)
+                sample_indexes.append(sample_idx)
+
+        assert len(group_indexes) == len(sample_indexes), f"Internal bug: {len(group_indexes)=} != {len(sample_indexes)=}"
+        return group_indexes, sample_indexes
 
     def _split_groups(self) -> list[pd.DataFrame]:
         """
