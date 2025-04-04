@@ -1,5 +1,9 @@
 # automl
 
+## TODO:
+
+- Tokenization and move batch to device - figure that out, not great right now.
+
 ## Usage
 
 ```python
