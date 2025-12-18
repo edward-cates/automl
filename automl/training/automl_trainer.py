@@ -26,6 +26,7 @@ class AutomlTrainer:
             epoch_compare_fn: Callable[[dict[str, float] | None, dict[str, float]], bool],
             test_samples: Sequence | None = None,
             batch_size: int = 2,
+            patience: int = 10,
             data_split_ratio: float = 0.8,
             shuffle_before_split: bool = True,
             optimizer_kwargs: dict = dict(
@@ -53,6 +54,7 @@ class AutomlTrainer:
         self.eval_fn = eval_fn
         self.epoch_compare_fn = epoch_compare_fn
         self.batch_size = batch_size
+        self.patience = patience
         # Prepare.
         self.optimizer = AdamW(self.model.parameters(), **optimizer_kwargs)
         if test_samples is not None:
@@ -65,6 +67,7 @@ class AutomlTrainer:
         self.test_loader = DataLoader(self.test_dataset, batch_size=batch_size, shuffle=True) # type: ignore
         self.epoch_number = 0
         self.metrics_over_time = list()
+        self.best_epoch_idx = None
         self.best_epoch_results = None
         self.best_model_state_dict = None
 
@@ -86,6 +89,7 @@ class AutomlTrainer:
             self.best_epoch_results["test"] if self.best_epoch_results is not None else None,
             epoch_results["test"],
         ):
+            self.best_epoch_idx = len(self.metrics_over_time) - 1
             self.best_epoch_results = epoch_results
             self.best_model_state_dict = {k: v.clone() for k, v in self.model.torch_model.state_dict().items()}
             # print(f"Updated best model state dict at epoch {self.epoch_number}.")
@@ -98,6 +102,19 @@ class AutomlTrainer:
     def run_test_epoch(self, break_at: int | None = None, use_tqdm: bool = True) -> dict[str, float]:
         with torch.no_grad():
             return self._epoch_inner(self.test_loader, is_train=False, break_at=break_at, use_tqdm=use_tqdm)
+
+    def check_patience(self) -> bool:
+        """
+        Returns True if the patience has been exhausted.
+        """
+        # If patience is None or 0, we never exhaust patience (always return False)
+        if self.patience is None or self.patience == 0:
+            return False
+        # Count how many epochs since the best epoch
+        if self.best_epoch_idx is None:
+            return False
+        epochs_since_best = self.epoch_number - (self.best_epoch_idx + 1)
+        return epochs_since_best >= self.patience
 
     def reload_best_checkpoint(self):
         assert self.best_model_state_dict is not None
